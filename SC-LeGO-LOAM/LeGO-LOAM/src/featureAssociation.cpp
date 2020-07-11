@@ -44,6 +44,7 @@ private:
     ros::Subscriber subLaserCloudInfo;
     ros::Subscriber subOutlierCloud;
     ros::Subscriber subImu;
+    ros::Subscriber subOdometry;
 
     ros::Publisher pubCornerPointsSharp;
     ros::Publisher pubCornerPointsLessSharp;
@@ -129,6 +130,9 @@ private:
     float imuAngularRotationY[imuQueLength];
     float imuAngularRotationZ[imuQueLength];
 
+    double odometryRoll, odometryPitch, odometryYaw, odometryX, odometryY, odometryZ;
+    double odometryRollLast, odometryPitchLast, odometryYawLast, odometryXLast, odometryYLast, odometryZLast;
+    double deltaOdometryRoll, deltaOdometryPitch, deltaOdometryYaw, deltaOdometryX, deltaOdometryY, deltaOdometryZ;
 
 
     ros::Publisher pubLaserCloudCornerLast;
@@ -191,6 +195,7 @@ public:
         subLaserCloudInfo = nh.subscribe<cloud_msgs::cloud_info>("/segmented_cloud_info", 1, &FeatureAssociation::laserCloudInfoHandler, this);
         subOutlierCloud = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud", 1, &FeatureAssociation::outlierCloudHandler, this);
         subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &FeatureAssociation::imuHandler, this);
+        subOdometry = nh.subscribe<nav_msgs::Odometry>(OdometryTopic, 1, &FeatureAssociation::OdometryHandler, this);
 
         pubCornerPointsSharp = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 1);
         pubCornerPointsLessSharp = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 1);
@@ -268,6 +273,10 @@ public:
         imuAngularRotationXCur = 0; imuAngularRotationYCur = 0; imuAngularRotationZCur = 0;
         imuAngularRotationXLast = 0; imuAngularRotationYLast = 0; imuAngularRotationZLast = 0;
         imuAngularFromStartX = 0; imuAngularFromStartY = 0; imuAngularFromStartZ = 0;
+
+        odometryRoll = 0; odometryPitch = 0; odometryYaw = 0; odometryX = 0; odometryY = 0; odometryZ = 0;
+        odometryRollLast = 0; odometryPitchLast = 0; odometryYawLast = 0; odometryXLast = 0; odometryYLast = 0; odometryZLast = 0;
+        deltaOdometryRoll = 0; deltaOdometryPitch = 0; deltaOdometryYaw = 0; deltaOdometryX = 0; deltaOdometryY = 0; deltaOdometryZ = 0;
 
         for (int i = 0; i < imuQueLength; ++i)
         {
@@ -425,7 +434,26 @@ public:
             imuAngularRotationX[imuPointerLast] = imuAngularRotationX[imuPointerBack] + imuAngularVeloX[imuPointerBack] * timeDiff;
             imuAngularRotationY[imuPointerLast] = imuAngularRotationY[imuPointerBack] + imuAngularVeloY[imuPointerBack] * timeDiff;
             imuAngularRotationZ[imuPointerLast] = imuAngularRotationZ[imuPointerBack] + imuAngularVeloZ[imuPointerBack] * timeDiff;
+
+            // imuAngularRotationX[imuPointerLast] = roll;
+            // imuAngularRotationY[imuPointerLast] = pitch;
+            // imuAngularRotationZ[imuPointerLast] = yaw;
         }
+    }
+
+    void OdometryHandler(const nav_msgs::Odometry::ConstPtr& Odometry){
+        double roll, pitch, yaw;
+        geometry_msgs::Quaternion geoQuat = Odometry->pose.pose.orientation;
+        tf::Matrix3x3(tf::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+    
+        odometryRoll = -pitch;
+        odometryPitch = -yaw;
+        odometryYaw = roll;
+        odometryX = Odometry->pose.pose.position.x;
+        odometryY = Odometry->pose.pose.position.y;
+        odometryZ = Odometry->pose.pose.position.z;
+        // std::cout<<"/odom:  "<<-pitch<<"\t"<<-yaw<<"\t"<<roll<<"\t";
+        // std::cout<<Odometry->pose.pose.position.x<<"\t"<<Odometry->pose.pose.position.y<<"\t"<<Odometry->pose.pose.position.z<<"\n";
     }
 
     void imuHandler(const sensor_msgs::Imu::ConstPtr& imuIn)
@@ -1650,6 +1678,20 @@ public:
         imuVeloFromStartY = imuVeloFromStartYCur;
         imuVeloFromStartZ = imuVeloFromStartZCur;
 
+        deltaOdometryRoll = odometryRoll - odometryRollLast;
+        deltaOdometryPitch = odometryPitch - odometryPitchLast ;
+        deltaOdometryYaw = odometryYaw - odometryYawLast;
+        deltaOdometryX = odometryX - odometryXLast;
+        deltaOdometryY = odometryY - odometryYLast;
+        deltaOdometryZ = odometryZ - odometryZLast;
+
+        odometryRollLast = odometryRoll;
+        odometryPitchLast = odometryPitch;
+        odometryYawLast = odometryYaw;
+        odometryXLast = odometryX;
+        odometryYLast = odometryY;
+        odometryZLast = odometryZ;
+
         if (imuAngularFromStartX != 0 || imuAngularFromStartY != 0 || imuAngularFromStartZ != 0){
             transformCur[0] = - imuAngularFromStartY;
             transformCur[1] = - imuAngularFromStartZ;
@@ -1661,6 +1703,12 @@ public:
             transformCur[4] -= imuVeloFromStartY * scanPeriod;
             transformCur[5] -= imuVeloFromStartZ * scanPeriod;
         }
+        transformCur[0] = - deltaOdometryPitch;
+        transformCur[1] = - deltaOdometryYaw;
+        transformCur[2] = - deltaOdometryRoll;
+        transformCur[3] = - deltaOdometryY;
+        transformCur[4] = - deltaOdometryZ;
+        transformCur[5] = - deltaOdometryX;
     }
 
     void updateTransformation(){
@@ -1691,6 +1739,11 @@ public:
                 continue;
             if (calculateTransformationCorner(iterCount2) == false)
                 break;
+        }
+
+        if(fabs(transformCur[1]+deltaOdometryYaw)>0.05){// 如果与轮速计相差3度
+             std::cout<<"fabs(transformCur[1]) = "<<fabs(transformCur[1])<<"\n";
+             transformCur[1] = - deltaOdometryYaw;
         }
     }
 
