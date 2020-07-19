@@ -42,10 +42,13 @@
 #include <gtsam/nonlinear/Values.h>
 
 #include <gtsam/nonlinear/ISAM2.h>
-
+#include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h>
+#include <tf/transform_listener.h>
 
 #include "Scancontext.h"
 #include "utility.h"
+#include <sys/stat.h>
 
 using namespace gtsam;
 
@@ -85,6 +88,7 @@ private:
     nav_msgs::Odometry odomAftMapped;
     tf::StampedTransform aftMappedTrans;
     tf::TransformBroadcaster tfBroadcaster;
+    tf::TransformListener tf_listener;
 
     vector<pcl::PointCloud<PointType>::Ptr> cornerCloudKeyFrames;
     vector<pcl::PointCloud<PointType>::Ptr> surfCloudKeyFrames;
@@ -154,7 +158,6 @@ private:
     pcl::PointCloud<PointType>::Ptr globalMapKeyPoses;
     pcl::PointCloud<PointType>::Ptr globalMapKeyPosesDS;
     pcl::PointCloud<PointType>::Ptr globalMapKeyFrames;
-    pcl::PointCloud<PointType>::Ptr globalMapKeyFramesDS;
 
     std::vector<int> pointSearchInd;
     std::vector<float> pointSearchSqDis;
@@ -236,6 +239,7 @@ private:
 
 public:
 
+    pcl::PointCloud<PointType>::Ptr globalMapKeyFramesDS;
     mapOptimization():
         nh("~")
     {
@@ -261,16 +265,27 @@ public:
         pubRegisteredCloud = nh.advertise<sensor_msgs::PointCloud2>("/registered_cloud", 2);
 
         float filter_size;
-        downSizeFilterCorner.setLeafSize(0.2, 0.2, 0.2);
-        filter_size = 0.5; downSizeFilterScancontext.setLeafSize(filter_size, filter_size, filter_size);
-        filter_size = 0.3; downSizeFilterSurf.setLeafSize(filter_size, filter_size, filter_size); // default 0.4;
-        downSizeFilterOutlier.setLeafSize(0.4, 0.4, 0.4);
+        //downSizeFilterCorner.setLeafSize(0.2, 0.2, 0.2);
+        //filter_size = 0.5; downSizeFilterScancontext.setLeafSize(filter_size, filter_size, filter_size);
+        //filter_size = 0.3; downSizeFilterSurf.setLeafSize(filter_size, filter_size, filter_size); // default 0.4;
+        //downSizeFilterOutlier.setLeafSize(0.4, 0.4, 0.4);
 
-        filter_size = 0.3; downSizeFilterHistoryKeyFrames.setLeafSize(filter_size, filter_size, filter_size); // default 0.4; for histor key frames of loop closure
-        filter_size = 1.0; downSizeFilterSurroundingKeyPoses.setLeafSize(filter_size, filter_size, filter_size); // default 1; for surrounding key poses of scan-to-map optimization
+        //filter_size = 0.3; downSizeFilterHistoryKeyFrames.setLeafSize(filter_size, filter_size, filter_size); // default 0.4; for histor key frames of loop closure
+        //filter_size = 1.0; downSizeFilterSurroundingKeyPoses.setLeafSize(filter_size, filter_size, filter_size); // default 1; for surrounding key poses of scan-to-map optimization
 
-        downSizeFilterGlobalMapKeyPoses.setLeafSize(1.0, 1.0, 1.0); // for global map visualization
-        downSizeFilterGlobalMapKeyFrames.setLeafSize(0.4, 0.4, 0.4); // for global map visualization
+        downSizeFilterCorner.setLeafSize(0.05, 0.05, 0.05);
+        filter_size = 0.05; downSizeFilterScancontext.setLeafSize(filter_size, filter_size, filter_size);
+        filter_size = 0.05; downSizeFilterSurf.setLeafSize(filter_size, filter_size, filter_size); // default 0.4;
+        downSizeFilterOutlier.setLeafSize(0.05, 0.05, 0.05);
+
+        filter_size = 0.05; downSizeFilterHistoryKeyFrames.setLeafSize(filter_size, filter_size, filter_size); // default 0.4; for histor key frames of loop closure
+        filter_size = 0.05; downSizeFilterSurroundingKeyPoses.setLeafSize(filter_size, filter_size, filter_size); // default 1; for surrounding key poses of scan-to-map optimization
+
+
+        downSizeFilterGlobalMapKeyPoses.setLeafSize(0.05, 0.05, 0.05); // for global map visualization
+        //downSizeFilterGlobalMapKeyPoses.setLeafSize(1.0, 1.0, 1.0); // for global map visualization
+        downSizeFilterGlobalMapKeyFrames.setLeafSize(0.05, 0.05, 0.05); // for global map visualization by Fy
+        //downSizeFilterGlobalMapKeyFrames.setLeafSize(0.4, 0.4, 0.4); // for global map visualization
 
         odomAftMapped.header.frame_id = "/camera_init";
         odomAftMapped.child_frame_id = "/aft_mapped";
@@ -758,38 +773,86 @@ public:
         } 
     }
 
-    void visualizeGlobalMapThread(){
+    void visualizeGlobalMapThread(){        
         ros::Rate rate(0.2);
         while (ros::ok()){
             rate.sleep();
             publishGlobalMap();
         }
-        // save final point cloud
-        pcl::io::savePCDFileASCII(fileDirectory+"finalCloud.pcd", *globalMapKeyFramesDS);
-
-        string cornerMapString = "/tmp/cornerMap.pcd";
-        string surfaceMapString = "/tmp/surfaceMap.pcd";
-        string trajectoryString = "/tmp/trajectory.pcd";
-
-        pcl::PointCloud<PointType>::Ptr cornerMapCloud(new pcl::PointCloud<PointType>());
-        pcl::PointCloud<PointType>::Ptr cornerMapCloudDS(new pcl::PointCloud<PointType>());
-        pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
-        pcl::PointCloud<PointType>::Ptr surfaceMapCloudDS(new pcl::PointCloud<PointType>());
+        mkdir("/data/lego_loam", S_IRWXU|S_IRWXG|S_IRWXO);
+        tf::StampedTransform transform;
+        try {
+            tf_listener.waitForTransform("map", "camera_init", ros::Time(0), ros::Duration(10.0));
+            tf_listener.lookupTransform("map", "camera_init", ros::Time(0), transform);
+        }
+        catch (tf::TransformException ex) {
+            ROS_ERROR("%s", ex.what());
+        }
         
-        for(int i = 0; i < cornerCloudKeyFrames.size(); i++) {
-            *cornerMapCloud  += *transformPointCloud(cornerCloudKeyFrames[i],   &cloudKeyPoses6D->points[i]);
-    	    *surfaceMapCloud += *transformPointCloud(surfCloudKeyFrames[i],     &cloudKeyPoses6D->points[i]);
-    	    *surfaceMapCloud += *transformPointCloud(outlierCloudKeyFrames[i],  &cloudKeyPoses6D->points[i]);
+        pcl::PointCloud<PointType>::Ptr cornerMapCloud(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr outlierMapCloud(new pcl::PointCloud<PointType>());
+	pcl::PointCloud<PointType>::Ptr finalMapCloud(new pcl::PointCloud<PointType>());
+	pcl::PointCloud<PointType>::Ptr finalMapCloudDS(new pcl::PointCloud<PointType>());
+        for (int i = 0; i < cornerCloudKeyFrames.size(); ++i){
+		*cornerMapCloud = *transformPointCloud(cornerCloudKeyFrames[i], &cloudKeyPoses6D->points[i]);
+		*surfaceMapCloud = *transformPointCloud(surfCloudKeyFrames[i], &cloudKeyPoses6D->points[i]);
+		*outlierMapCloud = *transformPointCloud(outlierCloudKeyFrames[i], &cloudKeyPoses6D->points[i]);
+		pcl_ros::transformPointCloud(*cornerMapCloud, *cornerMapCloud, transform);
+		pcl_ros::transformPointCloud(*surfaceMapCloud, *surfaceMapCloud, transform);
+		pcl_ros::transformPointCloud(*outlierMapCloud, *outlierMapCloud, transform);
+		if (cornerMapCloud->points.size()!=0)
+			pcl::io::savePCDFile("/data/lego_loam/cornerMap_"+to_string(i)+".pcd", *cornerMapCloud);
+		if (surfaceMapCloud->points.size()!=0)
+			pcl::io::savePCDFile("/data/lego_loam/surfaceMap_"+to_string(i)+".pcd", *surfaceMapCloud);
+		if (outlierMapCloud->points.size()!=0)
+			pcl::io::savePCDFile("/data/lego_loam/outlierMap_"+to_string(i)+".pcd", *outlierMapCloud);
+		*finalMapCloud += *cornerMapCloud;
+		*finalMapCloud += *surfaceMapCloud;
+		*finalMapCloud += *outlierMapCloud;
+		cornerMapCloud->clear();
+		surfaceMapCloud->clear();
+		outlierMapCloud->clear();
         }
 
-        downSizeFilterCorner.setInputCloud(cornerMapCloud);
-        downSizeFilterCorner.filter(*cornerMapCloudDS);
-        downSizeFilterSurf.setInputCloud(surfaceMapCloud);
-        downSizeFilterSurf.filter(*surfaceMapCloudDS);
+        if (finalMapCloud->points.size()!=0)
+	{
+        	pcl::io::savePCDFile("/data/lego_loam/finalCloud.pcd", *finalMapCloud);
+        	downSizeFilterGlobalMapKeyFrames.setInputCloud(finalMapCloud);
+        	downSizeFilterGlobalMapKeyFrames.filter(*finalMapCloudDS);
+        	pcl::io::savePCDFile("/data/lego_loam/finalCloudDS.pcd", *finalMapCloudDS);
+	}
+	if (cloudKeyPoses3D->points.size()!=0)
+		pcl::io::savePCDFile("/data/lego_loam/trajectory.pcd", *cloudKeyPoses6D);
 
-        pcl::io::savePCDFileASCII(fileDirectory+"cornerMap.pcd", *cornerMapCloudDS);
-        pcl::io::savePCDFileASCII(fileDirectory+"surfaceMap.pcd", *surfaceMapCloudDS);
-        pcl::io::savePCDFileASCII(fileDirectory+"trajectory.pcd", *cloudKeyPoses3D);
+	
+
+
+        // save final point cloud
+//        pcl::io::savePCDFileASCII(fileDirectory+"finalCloud.pcd", *globalMapKeyFramesDS);
+//        string cornerMapString = "/tmp/cornerMap.pcd";
+//        string surfaceMapString = "/tmp/surfaceMap.pcd";
+//        string trajectoryString = "/tmp/trajectory.pcd";
+
+//        pcl::PointCloud<PointType>::Ptr cornerMapCloud(new pcl::PointCloud<PointType>());
+//        pcl::PointCloud<PointType>::Ptr cornerMapCloudDS(new pcl::PointCloud<PointType>());
+//        pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
+//        pcl::PointCloud<PointType>::Ptr surfaceMapCloudDS(new pcl::PointCloud<PointType>());
+        
+//        for(int i = 0; i < cornerCloudKeyFrames.size(); i++) {
+//            *cornerMapCloud  += *transformPointCloud(cornerCloudKeyFrames[i],   &cloudKeyPoses6D->points[i]);
+//    	    *surfaceMapCloud += *transformPointCloud(surfCloudKeyFrames[i],     &cloudKeyPoses6D->points[i]);
+//    	    *surfaceMapCloud += *transformPointCloud(outlierCloudKeyFrames[i],  &cloudKeyPoses6D->points[i]);
+//        }
+
+//        downSizeFilterCorner.setInputCloud(cornerMapCloud);
+//        downSizeFilterCorner.filter(*cornerMapCloudDS);
+//        downSizeFilterSurf.setInputCloud(surfaceMapCloud);
+//        downSizeFilterSurf.filter(*surfaceMapCloudDS);
+
+//        pcl::io::savePCDFileASCII(fileDirectory+"cornerMap.pcd", *cornerMapCloudDS);
+//        pcl::io::savePCDFileASCII(fileDirectory+"surfaceMap.pcd", *surfaceMapCloudDS);
+//        pcl::io::savePCDFileASCII(fileDirectory+"trajectory.pcd", *cloudKeyPoses3D);
     }
 
     void publishGlobalMap(){
