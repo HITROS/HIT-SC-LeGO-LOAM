@@ -61,6 +61,11 @@ extern const string OdometryTopic = "/odom";
 // Save pcd
 extern const string fileDirectory = "/tmp/";
 
+// Which part in z direction of point cloud to make occupied map
+extern const float pointcloud_max_z = 0.1;
+extern const float pointcloud_min_z = -0.1;
+
+
 // Using velodyne cloud "ring" channel for image projection (other lidar may have different name for this channel, change "PointXYZIR" below)
 extern const bool useCloudRing = false; // if true, ang_res_y and ang_bottom are not used
 

@@ -43,6 +43,7 @@
 
 #include <gtsam/nonlinear/ISAM2.h>
 
+
 #include "Scancontext.h"
 #include "utility.h"
 
@@ -735,14 +736,24 @@ public:
 
         if (pubRegisteredCloud.getNumSubscribers() != 0){
             pcl::PointCloud<PointType>::Ptr cloudOut(new pcl::PointCloud<PointType>());
+            pcl::PointCloud<PointType>::Ptr cloudTemp(new pcl::PointCloud<PointType>());
             PointTypePose thisPose6D = trans2PointTypePose(transformTobeMapped);
-            *cloudOut += *transformPointCloud(laserCloudCornerLastDS,  &thisPose6D);
-            *cloudOut += *transformPointCloud(laserCloudSurfTotalLast, &thisPose6D);
-            
+            // *cloudOut += *transformPointCloud(laserCloudCornerLastDS,  &thisPose6D);
+            // *cloudOut += *transformPointCloud(laserCloudSurfTotalLast, &thisPose6D);
+            *cloudOut += *laserCloudCornerLastDS;
+            *cloudOut += *laserCloudSurfTotalLast;
+            std::vector<int> toReserveIndexs; 
+            for(int i = 0; i < (cloudOut->points.size()); i++){
+                if((cloudOut->points[i].y) < pointcloud_max_z && (cloudOut->points[i].y) > pointcloud_min_z){
+                    toReserveIndexs.push_back(i);
+                }
+            } 
+            pcl::copyPointCloud(*cloudOut, toReserveIndexs, *cloudTemp);
+            *cloudOut = *cloudTemp;
             sensor_msgs::PointCloud2 cloudMsgTemp;
             pcl::toROSMsg(*cloudOut, cloudMsgTemp);
             cloudMsgTemp.header.stamp = ros::Time().fromSec(timeLaserOdometry);
-            cloudMsgTemp.header.frame_id = "/camera_init";
+            cloudMsgTemp.header.frame_id = "/aft_mapped";
             pubRegisteredCloud.publish(cloudMsgTemp);
         } 
     }

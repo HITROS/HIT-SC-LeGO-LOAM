@@ -435,9 +435,9 @@ public:
             imuAngularRotationY[imuPointerLast] = imuAngularRotationY[imuPointerBack] + imuAngularVeloY[imuPointerBack] * timeDiff;
             imuAngularRotationZ[imuPointerLast] = imuAngularRotationZ[imuPointerBack] + imuAngularVeloZ[imuPointerBack] * timeDiff;
 
-            // imuAngularRotationX[imuPointerLast] = roll;
-            // imuAngularRotationY[imuPointerLast] = pitch;
-            // imuAngularRotationZ[imuPointerLast] = yaw;
+            imuAngularRotationX[imuPointerLast] = roll;
+            imuAngularRotationY[imuPointerLast] = pitch;
+            imuAngularRotationZ[imuPointerLast] = yaw;
         }
     }
 
@@ -1703,12 +1703,12 @@ public:
             transformCur[4] -= imuVeloFromStartY * scanPeriod;
             transformCur[5] -= imuVeloFromStartZ * scanPeriod;
         }
-        transformCur[0] = - deltaOdometryPitch;
-        transformCur[1] = - deltaOdometryYaw;
-        transformCur[2] = - deltaOdometryRoll;
-        transformCur[3] = - deltaOdometryY;
-        transformCur[4] = - deltaOdometryZ;
-        transformCur[5] = - deltaOdometryX;
+        // transformCur[0] = - deltaOdometryPitch;
+        // transformCur[1] = - deltaOdometryYaw;
+        // transformCur[2] = - deltaOdometryRoll;
+        // transformCur[3] = - deltaOdometryY;
+        // transformCur[4] = - deltaOdometryZ;
+        // transformCur[5] = - deltaOdometryX;
     }
 
     void updateTransformation(){
