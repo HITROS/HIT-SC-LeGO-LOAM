@@ -69,3 +69,6 @@ target_link_libraries(mapOptmization
 
 add_executable(transformFusion src/transformFusion.cpp)
 target_link_libraries(transformFusion ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
+
+add_executable(coordinateCorrection src/coordinateCorrection.cpp)
+target_link_libraries(coordinateCorrection ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})

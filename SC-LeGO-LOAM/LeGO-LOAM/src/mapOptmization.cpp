@@ -77,6 +77,7 @@ private:
     ros::Publisher pubIcpKeyFrames;
     ros::Publisher pubRecentKeyFrames;
     ros::Publisher pubRegisteredCloud;
+    ros::Publisher pubCurrentFrame;
 
     ros::Subscriber subLaserCloudRaw;
     ros::Subscriber subLaserCloudCornerLast;
@@ -263,6 +264,7 @@ public:
         pubIcpKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/corrected_cloud", 2);
         pubRecentKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/recent_cloud", 2);
         pubRegisteredCloud = nh.advertise<sensor_msgs::PointCloud2>("/registered_cloud", 2);
+        pubCurrentFrame = nh.advertise<sensor_msgs::PointCloud2>("/current_frame", 2);
 
         float filter_size;
         //downSizeFilterCorner.setLeafSize(0.2, 0.2, 0.2);
@@ -749,6 +751,16 @@ public:
             pubRecentKeyFrames.publish(cloudMsgTemp);
         }
 
+        if (pubCurrentFrame.getNumSubscribers() != 0){
+            pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
+            *surfaceMapCloud = *transformPointCloud(surfCloudKeyFrames[surfCloudKeyFrames.size()-1], &cloudKeyPoses6D->points[cloudKeyPoses6D->points.size()-1]);
+            sensor_msgs::PointCloud2 cloudMsgTemp;
+            pcl::toROSMsg(*surfaceMapCloud, cloudMsgTemp);
+            cloudMsgTemp.header.stamp = ros::Time().fromSec(timeLaserOdometry);
+            cloudMsgTemp.header.frame_id = "/camera_init";
+            pubCurrentFrame.publish(cloudMsgTemp);
+        } 
+
         if (pubRegisteredCloud.getNumSubscribers() != 0){
             pcl::PointCloud<PointType>::Ptr cloudOut(new pcl::PointCloud<PointType>());
             pcl::PointCloud<PointType>::Ptr cloudTemp(new pcl::PointCloud<PointType>());
@@ -792,8 +804,8 @@ public:
         pcl::PointCloud<PointType>::Ptr cornerMapCloud(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
         pcl::PointCloud<PointType>::Ptr outlierMapCloud(new pcl::PointCloud<PointType>());
-	pcl::PointCloud<PointType>::Ptr finalMapCloud(new pcl::PointCloud<PointType>());
-	pcl::PointCloud<PointType>::Ptr finalMapCloudDS(new pcl::PointCloud<PointType>());
+	    pcl::PointCloud<PointType>::Ptr finalMapCloud(new pcl::PointCloud<PointType>());
+	    pcl::PointCloud<PointType>::Ptr finalMapCloudDS(new pcl::PointCloud<PointType>());
         for (int i = 0; i < cornerCloudKeyFrames.size(); ++i){
 		*cornerMapCloud = *transformPointCloud(cornerCloudKeyFrames[i], &cloudKeyPoses6D->points[i]);
 		*surfaceMapCloud = *transformPointCloud(surfCloudKeyFrames[i], &cloudKeyPoses6D->points[i]);

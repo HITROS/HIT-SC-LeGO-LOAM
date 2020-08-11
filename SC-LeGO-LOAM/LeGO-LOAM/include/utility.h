@@ -22,6 +22,10 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/common/common.h>
 #include <pcl/registration/icp.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>	//随机样本一致性算法	方法类型
+#include <pcl/sample_consensus/model_types.h>		//随机样本一致性算法	模型类型
+#include <pcl/segmentation/sac_segmentation.h>	//随机样本一致性算法	分割方法
 
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
